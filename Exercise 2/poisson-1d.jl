@@ -63,9 +63,9 @@ end
 function solve(p::AnalyticalPoisson1D,N::Int)
     Ω = p.Ω
     h = (Ω.b - Ω.a) / N
-    x = range(Ω.a, stop=Ω.b, length=N+1)
-    u = zeros(N+1)
-    for i in 1:N+1
+    x = range(Ω.a + h/2, stop=Ω.b-h/2, length=N)
+    u = zeros(N)
+    for i in 1:N
         u[i] = p(x[i])
     end
     return Solution(u, x)
@@ -113,11 +113,44 @@ function solve(p::FiniteVolumePoisson1D,N::Int)
     return Solution(Q,x)
 end
 
-
 struct Solution
     u::Vector{Real}
     x::Vector{Real}
 end
+
+struct ErrorEstimator
+    exact::AnalyticalPoisson1D
+    numerical::NumericalPoisson1D
+    hs::Vector{Real}
+end
+
+struct Error
+    hs::Vector{Real}
+    error::Vector{Real}
+end
+
+function error(estimator::ErrorEstimator)
+    exact = estimator.exact
+    numerical = estimator.numerical
+    hs = estimator.hs
+    error = zeros(length(hs))
+    for i in 1:length(hs)
+        h_error =  0.0;
+        N = round(Int, (exact.Ω.b - exact.Ω.a) / hs[i])
+        u_exact = solve(exact, N)
+        u_numerical = solve(numerical, N)
+        for j in 1:length(hs)
+            e =  abs(u_exact.u[j] - u_numerical.u[j])
+            h_error  = max(h_error, e)
+        end
+        error[i] = h_error
+    end
+    return Error(hs, error)
+    
+end
+
+
+## Solve Task C ##
 
 Ω = Domain1D(0.0, 1.0)
 u_case1 = AnalyticalPoisson1D(Function1D(x -> sin(π*x)), Ω)
@@ -136,5 +169,14 @@ plot!(sol_anal_case2.x, sol_anal_case2.u, label="cos(πx)")
 scatter!(sol_fv_case1.x, sol_fv_case1.u, label="Finite Volume Method")
 scatter!(sol_fv_case2.x, sol_fv_case2.u, label="Finite Volume Method")
 
+## Solve Task D ##
+## Compute the error estimator for the finite volume method ##
+i = 5:15 .|> Float64 
+hs = 2 .^ (- i)
+error_case1  = ErrorEstimator(u_case1, u_case1_fv, hs) |> error
+error_case2 = ErrorEstimator(u_case2, u_case2_fv, hs) |> error
 
- 
+## Plot the error estimator for the finite volume method (log scale)##
+plot(hs, error_case1.error, label="sin(πx)", xlabel="h", ylabel="Error", title="Error Estimator", yscale=:log2)
+plot!(hs, error_case2.error, label="cos(πx)")
+
